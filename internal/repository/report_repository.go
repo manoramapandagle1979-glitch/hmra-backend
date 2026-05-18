@@ -16,6 +16,9 @@ type ReportFilters struct {
 	Category    string   // Category slug
 	Geography   []string // Array of geography strings
 	Search      string   // Full-text search query
+	Industry    string   // Filter by industry string
+	YearStart   *int     // Filter: year_start >= value
+	YearEnd     *int     // Filter: year_end <= value
 	Page        int
 	Limit       int
 
@@ -146,9 +149,28 @@ func (r *reportRepository) GetAllWithFilters(filters ReportFilters) ([]report.Re
 	// Search filter
 	if filters.Search != "" {
 		searchPattern := "%" + filters.Search + "%"
-		conditions = append(conditions, "(r.title ILIKE ? OR r.summary ILIKE ? OR r.description ILIKE ?)")
-		args = append(args, searchPattern, searchPattern, searchPattern)
-		countArgs = append(countArgs, searchPattern, searchPattern, searchPattern)
+		conditions = append(conditions, "(r.title ILIKE ? OR r.summary ILIKE ? OR r.description ILIKE ? OR r.industry ILIKE ? OR r.tags::text ILIKE ?)")
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+		countArgs = append(countArgs, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+
+	// Industry filter
+	if filters.Industry != "" {
+		conditions = append(conditions, "r.industry ILIKE ?")
+		args = append(args, filters.Industry)
+		countArgs = append(countArgs, filters.Industry)
+	}
+
+	// Year range filters
+	if filters.YearStart != nil {
+		conditions = append(conditions, "r.year_start >= ?")
+		args = append(args, *filters.YearStart)
+		countArgs = append(countArgs, *filters.YearStart)
+	}
+	if filters.YearEnd != nil {
+		conditions = append(conditions, "r.year_end <= ?")
+		args = append(args, *filters.YearEnd)
+		countArgs = append(countArgs, *filters.YearEnd)
 	}
 
 	// Admin filters
@@ -341,9 +363,9 @@ func (r *reportRepository) Search(query string, page, limit int) ([]report.Repor
 		SELECT COUNT(*)
 		FROM reports r
 		LEFT JOIN categories c ON r.category_id = c.id
-		WHERE (r.title ILIKE ? OR r.description ILIKE ? OR r.summary ILIKE ?) AND r.deleted_at IS NULL
+		WHERE (r.title ILIKE ? OR r.description ILIKE ? OR r.summary ILIKE ? OR r.industry ILIKE ? OR r.tags::text ILIKE ?) AND r.deleted_at IS NULL
 	`
-	if err := r.db.Raw(countSQL, searchPattern, searchPattern, searchPattern).Scan(&total).Error; err != nil {
+	if err := r.db.Raw(countSQL, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern).Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -351,12 +373,12 @@ func (r *reportRepository) Search(query string, page, limit int) ([]report.Repor
 		SELECT r.*, c.name as category_name, c.image_url as category_image_url
 		FROM reports r
 		LEFT JOIN categories c ON r.category_id = c.id
-		WHERE (r.title ILIKE ? OR r.description ILIKE ? OR r.summary ILIKE ?) AND r.deleted_at IS NULL
+		WHERE (r.title ILIKE ? OR r.description ILIKE ? OR r.summary ILIKE ? OR r.industry ILIKE ? OR r.tags::text ILIKE ?) AND r.deleted_at IS NULL
 		ORDER BY COALESCE(r.id) DESC
 		LIMIT ? OFFSET ?
 	`
 
-	err := r.db.Raw(querySQL, searchPattern, searchPattern, searchPattern, limit, offset).Scan(&reports).Error
+	err := r.db.Raw(querySQL, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, limit, offset).Scan(&reports).Error
 
 	return reports, total, err
 }

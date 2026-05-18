@@ -109,6 +109,19 @@ func (h *ReportHandler) GetAll(c *fiber.Ctx) error {
 	geographyParam := c.Query("geography")
 	search := c.Query("search")
 	deletedParam := c.Query("deleted")
+	industry := c.Query("industry")
+
+	var yearStart, yearEnd *int
+	if ys := c.Query("year_start"); ys != "" {
+		if v, err := strconv.Atoi(ys); err == nil {
+			yearStart = &v
+		}
+	}
+	if ye := c.Query("year_end"); ye != "" {
+		if v, err := strconv.Atoi(ye); err == nil {
+			yearEnd = &v
+		}
+	}
 
 	// Admin filters
 	var createdBy *uint
@@ -186,7 +199,8 @@ func (h *ReportHandler) GetAll(c *fiber.Ctx) error {
 	hasFilters := status != "" || category != "" || geographyParam != "" || search != "" ||
 		createdBy != nil || updatedBy != nil ||
 		createdAfter != nil || createdBefore != nil || updatedAfter != nil || updatedBefore != nil ||
-		publishedAfter != nil || publishedBefore != nil || showDeleted || sortBy != ""
+		publishedAfter != nil || publishedBefore != nil || showDeleted || sortBy != "" ||
+		industry != "" || yearStart != nil || yearEnd != nil
 
 	if hasFilters {
 		// Parse geography into array
@@ -204,6 +218,9 @@ func (h *ReportHandler) GetAll(c *fiber.Ctx) error {
 			Category:        category,
 			Geography:       geography,
 			Search:          search,
+			Industry:        industry,
+			YearStart:       yearStart,
+			YearEnd:         yearEnd,
 			CreatedBy:       createdBy,
 			UpdatedBy:       updatedBy,
 			CreatedAfter:    createdAfter,
@@ -478,6 +495,11 @@ func (h *ReportHandler) Create(c *fiber.Ctx) error {
 		return response.BadRequest(c, "At least one geography is required")
 	}
 
+	// Validate year range if both provided
+	if req.YearStart != nil && req.YearEnd != nil && *req.YearStart >= *req.YearEnd {
+		return response.BadRequest(c, "year_start must be less than year_end")
+	}
+
 	// Set default values if not provided
 	if req.Status == "" {
 		req.Status = "draft"
@@ -552,6 +574,11 @@ func (h *ReportHandler) Update(c *fiber.Ctx) error {
 	}
 	if len(req.Geography) == 0 {
 		return response.BadRequest(c, "At least one geography is required")
+	}
+
+	// Validate year range if both provided
+	if req.YearStart != nil && req.YearEnd != nil && *req.YearStart >= *req.YearEnd {
+		return response.BadRequest(c, "year_start must be less than year_end")
 	}
 
 	// Pass user ID to service for version history

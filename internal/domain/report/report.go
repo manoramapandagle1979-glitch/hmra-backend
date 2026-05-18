@@ -91,6 +91,29 @@ type FAQ struct {
 	Answer   string `json:"answer"`
 }
 
+// Prices holds the 4-tier licensing price structure
+type Prices struct {
+	Single     float64 `json:"single"`
+	Team       float64 `json:"team"`
+	Enterprise float64 `json:"enterprise"`
+	DataPack   float64 `json:"dataPack"`
+}
+
+func (p Prices) Value() (driver.Value, error) {
+	return json.Marshal(p)
+}
+
+func (p *Prices) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+	return json.Unmarshal(bytes, p)
+}
+
 type FAQs []FAQ
 
 func (f FAQs) Value() (driver.Value, error) {
@@ -202,11 +225,25 @@ type Report struct {
 	Price            float64        `json:"price" gorm:"type:decimal(10,2);default:0"`
 	DiscountedPrice  float64        `json:"discounted_price" gorm:"type:decimal(10,2);default:0"`
 	Currency         string         `json:"currency" gorm:"type:varchar(3);default:'USD'"`
+	Prices           Prices         `json:"prices" gorm:"type:jsonb;default:'{}'"`
 
 	// Report details
 	PageCount       int             `json:"page_count" gorm:"default:0"`
 	Formats         StringSlice     `json:"formats,omitempty" gorm:"type:jsonb"`
 	Geography       StringSlice     `json:"geography" gorm:"type:jsonb;not null"`
+
+	// Market classification (from WP import)
+	Excerpt      string      `json:"excerpt" gorm:"type:text"`
+	Industry     string      `json:"industry" gorm:"size:255"`
+	Tags         StringSlice `json:"tags" gorm:"type:jsonb;default:'[]'"`
+	Code         *string     `json:"code,omitempty" gorm:"size:100"`
+	StudyPeriod  string      `json:"study_period" gorm:"size:50"`
+	BaseYear     *int        `json:"base_year,omitempty"`
+	YearStart    *int        `json:"year_start,omitempty"`
+	YearEnd      *int        `json:"year_end,omitempty"`
+	CAGR         *float64    `json:"cagr,omitempty" gorm:"column:cagr"`
+	Segmentation string      `json:"segmentation" gorm:"type:text"`
+	Methodology  string      `json:"methodology" gorm:"type:text"`
 
 	// Status and access
 	Status                  string     `json:"status" gorm:"type:varchar(20);default:'draft';index"`
