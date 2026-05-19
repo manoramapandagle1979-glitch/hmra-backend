@@ -215,6 +215,7 @@ func main() {
 	// Auth routes (public with rate limiting)
 	auth := v1.Group("/auth")
 	auth.Post("/login", middleware.RateLimit(cfg.RateLimit.LoginMaxAttempts, cfg.RateLimit.LoginWindow), authHandler.Login)
+	auth.Post("/register", middleware.RateLimit(cfg.RateLimit.LoginMaxAttempts, cfg.RateLimit.LoginWindow), authHandler.Register)
 	auth.Post("/refresh", authHandler.Refresh)
 	auth.Post("/logout", middleware.RequireAuth(authService), authHandler.Logout)
 

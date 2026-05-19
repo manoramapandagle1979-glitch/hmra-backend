@@ -83,6 +83,49 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	return response.Success(c, loginResp)
 }
 
+// Register godoc
+// @Summary Register a new user
+// @Description Create a new viewer-role account and return tokens
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param registration body user.RegisterRequest true "Registration data"
+// @Success 201 {object} response.Response{data=user.LoginResponse}
+// @Failure 400 {object} response.Response{error=string}
+// @Failure 409 {object} response.Response{error=string}
+// @Router /api/v1/auth/register [post]
+func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	var req user.RegisterRequest
+
+	if err := c.BodyParser(&req); err != nil {
+		return response.BadRequest(c, "Invalid request body")
+	}
+
+	if req.Email == "" || req.Password == "" || req.Name == "" {
+		return response.BadRequest(c, "Name, email, and password are required")
+	}
+
+	if !strings.Contains(req.Email, "@") {
+		return response.BadRequest(c, "Invalid email format")
+	}
+
+	loginResp, err := h.authService.Register(&req)
+	if err != nil {
+		if err == service.ErrEmailTaken {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"success": false,
+				"error":   "Email already in use",
+			})
+		}
+		return response.InternalError(c, "Failed to create account")
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"data":    loginResp,
+	})
+}
+
 // Refresh godoc
 // @Summary Refresh access token
 // @Description Generate new access token using refresh token

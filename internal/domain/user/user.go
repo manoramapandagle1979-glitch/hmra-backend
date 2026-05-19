@@ -27,6 +27,13 @@ func (User) TableName() string {
 	return "users"
 }
 
+// RegisterRequest represents the public registration request payload
+type RegisterRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+	Name     string `json:"name" validate:"required"`
+}
+
 // LoginRequest represents the login request payload
 type LoginRequest struct {
 	Email    string `json:"email" validate:"required,email"`

@@ -21,6 +21,7 @@ var (
 // AuthService defines the interface for authentication business logic
 type AuthService interface {
 	Login(email, password string) (*user.LoginResponse, error)
+	Register(req *user.RegisterRequest) (*user.LoginResponse, error)
 	RefreshToken(refreshToken string) (*user.RefreshResponse, error)
 	Logout(userID uint, refreshToken string) error
 	ValidateAccessToken(token string) (*user.User, error)
@@ -91,6 +92,65 @@ func (s *authService) Login(email, password string) (*user.LoginResponse, error)
 		TokenType:    "Bearer",
 		ExpiresIn:    auth.GetTokenExpiry(s.cfg.AccessTokenExpiry),
 		User:         u.ToUserResponse(),
+	}, nil
+}
+
+// Register creates a new viewer-role user and returns tokens
+func (s *authService) Register(req *user.RegisterRequest) (*user.LoginResponse, error) {
+	// Check if email is already taken
+	existing, err := s.userRepo.GetByEmail(req.Email)
+	if err == nil && existing != nil {
+		return nil, ErrEmailTaken
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("failed to check email availability: %w", err)
+	}
+
+	// Hash password
+	hashedPassword, err := auth.HashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Create user with viewer role
+	newUser := &user.User{
+		Email:        req.Email,
+		PasswordHash: hashedPassword,
+		Name:         req.Name,
+		Role:         user.RoleViewer,
+		IsActive:     true,
+	}
+	if err := s.userRepo.Create(newUser); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Generate tokens
+	accessToken, err := auth.GenerateAccessToken(newUser, s.cfg.JWTSecret, s.cfg.AccessTokenExpiry, s.cfg.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	refreshToken, err := auth.GenerateRefreshToken(newUser, s.cfg.JWTSecret, s.cfg.RefreshTokenExpiry, s.cfg.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	// Store refresh token in Redis
+	refreshClaims, err := auth.ValidateToken(refreshToken, s.cfg.JWTSecret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate refresh token: %w", err)
+	}
+	refreshTokenKey := fmt.Sprintf("refresh_token:%d:%s", newUser.ID, refreshClaims.RegisteredClaims.ID)
+	if err := cache.Set(refreshTokenKey, refreshToken, s.cfg.RefreshTokenExpiry); err != nil {
+		fmt.Printf("Warning: Failed to store refresh token in Redis: %v\n", err)
+	}
+
+	return &user.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    auth.GetTokenExpiry(s.cfg.AccessTokenExpiry),
+		User:         newUser.ToUserResponse(),
 	}, nil
 }
 
